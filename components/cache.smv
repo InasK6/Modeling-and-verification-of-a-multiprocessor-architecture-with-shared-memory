@@ -1,0 +1,7 @@
+MODULE main
+VAR 
+    -- REQ[0] is the memory adress AD
+    -- REQ[] 
+    REQ : array 0..2 of boolean 
+
+MODULE cache-device

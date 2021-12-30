@@ -1,0 +1,12 @@
+
+Module main
+VAR
+
+ASSIGN
+    init () :=
+
+    spec
+
+
+Module arbitre
+VAR state

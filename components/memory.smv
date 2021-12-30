@@ -1,0 +1,19 @@
+-- le bus servant de point de synchronisation,
+-- il n'y a pas plusieurs lectures ou écritures 
+-- possibles au même temps sur la mémoire 
+Module main
+VAR
+    
+
+ASSIGN
+    init () :=
+
+    spec
+
+
+Module memory-device
+VAR
+    state: { idle, read, write}
+
+ASSIGN
+    init(state) := idle
