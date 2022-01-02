@@ -1,19 +1,139 @@
 -- le bus servant de point de synchronisation,
 -- il n'y a pas plusieurs lectures ou écritures 
 -- possibles au même temps sur la mémoire 
-Module main
+MODULE memory-device(AD, DT, CTRL, VALID, ACK,b_out)
 VAR
+    state: { idle, read_wait, write_wait, read_ready, write_ready };
+    ready: boolean;
+    b_in_mem: array 0..4 of boolean;
+    cases: array 0..1 of boolean;
+
+DEFINE 
+    REQUEST :=(state= read_wait |state= write_wait);
+    ENDED := ( state = read_ready | state = write_ready);
+ASSIGN
+    init(state) := idle;
+    init(ready) := FALSE;
+
+    -- hypothèse: cases mémoires initialement contiennent 0
+    init(cases[0]) := FALSE;
+    init(cases[1]) := FALSE;
+
+    -- valeurs initiales de b_in_mem non significatives
+    init(b_in_mem[0]) := FALSE;
+    init(b_in_mem[1]) :=FALSE;
+    init(b_in_mem[2]) :=FALSE;
+    init(b_in_mem[3]) :=FALSE;
+    init( b_in_mem[4]) :=FALSE;
+ 
     
+    next(ready) :=
+        case 
+            -- both scenarios are possible 
+            --( either the memory has finish processing the querie or not)
+            REQUEST & ready=FALSE: {TRUE, FALSE}; 
+            -- answer to query completed
+            ready=TRUE : FALSE;
+            -- otherwise ready keeps the same value
+            ready=FALSE : FALSE;
+        esac;
 
-ASSIGN
-    init () :=
+    next(state) :=
+        case 
+        -- pas de requête
+            state=idle & b_out[3] = FALSE : idle;
+        -- arrivée d'une requête
+            state= idle & b_out[2]=FALSE: read_wait;-- modification of b_in_mem
+            state=idle & b_out[2]=TRUE : write_wait;-- modification of cases  
+        -- attente qu'elle soit traîtée par la mémoire 
+            REQUEST & !ready: state;
+            state=read_wait & ready : read_ready;
+            state= write_wait & ready: write_ready;
+            ENDED : idle; --mise de Valid à 1
+            
 
-    spec
+        esac;
 
+    -- Memory locations
+    next(cases[0]):=
+        case
+            -- écriture à l'adresse 0
+            state=idle & b_out[VALID] & !b_out[AD] : b_out[1];
+            -- écriture à l'adresse 1
+            -- lecture ou tout autre cas => garde la même valeur
+            TRUE: cases[0];
+        esac;
+    next(cases[1]):=
+        case
+            -- écriture à l'adresse 1
+            state=idle & b_out[VALID] & b_out[AD] : b_out[1];
+            -- dans tout autre situation, on garde les mêmes valeurs
+            TRUE: cases[1];
+        esac;
 
-Module memory-device
+    -- b_in_mem
+    next(b_in_mem[AD]):=
+        case
+            b_out[VALID]: b_out[AD];
+            TRUE: b_in_mem[AD];
+        esac;
+    
+    next(b_in_mem[DT]):=
+        case
+            -- écriture 
+            b_out[VALID] & b_out[CTRL] : b_out[DT]; -- ACK nécessaire
+            -- lecture à l'adresse 0
+            b_out[VALID] & !b_out[CTRL] & !b_out[AD]: cases[0];
+            --lecture à l'adresse 1
+            b_out[VALID] & !b_out[CTRL] & b_out[AD]: cases[1];
+            TRUE: b_in_mem[DT];
+
+        esac;
+    
+    -- la mémoire ne modifie pas cette valeur
+    next(b_in_mem[CTRL]):= 
+        case
+            b_out[VALID] : b_out[CTRL];
+            TRUE: b_in_mem[CTRL];
+        esac;
+
+    next(b_in_mem[VALID]):=
+        case
+            ENDED: TRUE;
+            state=idle: FALSE;
+            TRUE: b_in_mem[VALID];
+        esac;
+    
+    next(b_in_mem[ACK]):=
+        case
+            -- écriture
+            b_out[VALID] & b_out[CTRL]: TRUE;
+            state=idle: FALSE;
+            TRUE: b_in_mem[ACK];
+
+        esac;
+
+MODULE main
 VAR
-    state: { idle, read, write}
-
+    -- b_out[0]: AD
+    -- b_out[1]: DT
+    -- b_out[2]: CTRL: 0: READ; 1: WRITE
+    -- b_out[3]: VALID
+    -- b_out[4]: ACK
+    b_out:  array 0..4 of boolean;
+    memory: memory-device(AD, DT, CTRL, VALID, ACK, b_out);
+    
+DEFINE
+    AD:=0;
+    DT:=1;
+    CTRL:=2;
+    VALID:=3;
+    ACK:=4;
 ASSIGN
-    init(state) := idle
+    b_out[AD] :={FALSE, TRUE};
+    b_out[DT]:={FALSE, TRUE};
+    b_out[CTRL]:={FALSE, TRUE};
+    b_out[VALID]:={FALSE, TRUE};
+    b_out[ACK]:=FALSE; --only memory can place it to true
+
+    --spec
