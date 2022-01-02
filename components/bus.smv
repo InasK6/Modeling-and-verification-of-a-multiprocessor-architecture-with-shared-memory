@@ -1,7 +1,38 @@
+--b_in_L1_1, b_in_mem, valid, ack
+MODULE bus-device(ARB_GNT)
+VAR
+    state: { MEM, CACHE};
+
+ASSIGN
+    init(state) := MEM;
+    next(state) := 
+        case
+            state = MEM & ARB_GNT =0 : MEM;
+            state = MEM & ARB_GNT=1 : CACHE;
+            state = CACHE : MEM;
+        esac;
+
+
+
+
 MODULE main
+VAR 
+-- dans un premier temps,
+--  on considère que l'on est dans un système monoprocesseur
+    ARB_GNT : {0,1};
+    bus: bus-device(ARB_GNT);
+ASSIGN
+    ARB_GNT := {0,1};
 
+-- Spécifications à vérifier pour le bus
+-- quand il n'y a pas de requête posée, il est toujours attribué à la mémoire
+SPEC 
+    AG ((ARB_GNT =0) -> AX(bus.state=MEM)) 
 
-MODULE bus-device(b_in_L1_1, b_in_mem, valid, ack)
+-- s'il y a une requête, le cache fini par obtenir le bus
+SPEC
+    AG (ARB_GNT=1 & ! (bus.state=CACHE) -> AX(bus.state)=CACHE)
 
-
-
+-- Après l'obtention du bus par une requête, la mémoire prend la main
+SPEC
+    AG (bus.state=CACHE -> AX(bus.state=MEM))
