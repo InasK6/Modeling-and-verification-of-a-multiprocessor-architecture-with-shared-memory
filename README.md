@@ -3,14 +3,16 @@
 ![](images/Modelisation.jpg)
 ### Automate de chaque composant
 #### Bus
-![](images/Modelisation.jpg)
+![](images/BUS.jpg)
 #### Arbitre
 ![](images/Modelisation.jpg)
 #### Mémoire
 ![](images/Modelisation.jpg)
 #### Cache L1 
-![](images/Modelisation.jpg)
+simplification hypothesis: the cache only transmits the queries
+![](images/Cache.jpg)
 #### Processeur
-![](images/Modelisation.jpg)
+In the code modelisation, I consider that the states WRITE and READ can be combined into one state
+![](images/Processor.jpg)
 
 ### Snoop
