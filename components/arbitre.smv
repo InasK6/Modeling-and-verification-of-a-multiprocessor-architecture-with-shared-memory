@@ -1,12 +1,57 @@
-
-Module main
+-- arbitre simple dans le cas mono-processeur
+MODULE arbitre-device(VALID,L1_req,b_out )
 VAR
-
+    arb_gnt: {0,1};
+DEFINE
+    mem := 0;
+    L :=1;
 ASSIGN
-    init () :=
+    init(arb_gnt):=mem;
+    next(arb_gnt):=
+        case
+            arb_gnt=mem & (!L1_req | !b_out[VALID] ) : mem;
+            arb_gnt=mem & (L1_req & b_out[VALID]) : L;
+            arb_gnt=L : mem;
+            
+        esac;
 
-    spec
 
 
-Module arbitre
-VAR state
+MODULE main
+VAR
+    L1_req: boolean;
+    b_out: array 0..4 of boolean;
+    arbitre: arbitre-device(VALID,L1_req, b_out);
+DEFINE
+    AD:=0;
+    DT:=1;
+    CTRL:=2;
+    VALID :=  3;
+ASSIGN
+    L1_req:= {FALSE,TRUE};
+
+    b_out[AD]:= {FALSE, TRUE};
+    b_out[DT] := {FALSE, TRUE};
+    b_out[CTRL] :={FALSE, TRUE};
+    init(b_out[VALID]):=FALSE;
+    next(b_out[VALID]) := 
+        case
+            b_out[VALID]=FALSE: TRUE;
+            TRUE: FALSE;
+        esac;
+
+
+    
+-- Vivacité
+-- Quelque chose de bon finira par arriver
+-- Si la requête L1_req est positionné, elle finira par avoir l'arbitre
+SPEC
+    AG ( L1_req -> AF arbitre.arb_gnt=1)
+
+-- Sureté
+-- Quelque chose de mauvais n'arrivera jamais
+-- On ne peut pas avoir l'arbitre attribué à deux composants au même temps
+SPEC
+    AG !( arbitre.arb_gnt=1 & arbitre.arb_gnt=0)
+-- Equité 
+-- Quelque chose se produira infiniement souvent

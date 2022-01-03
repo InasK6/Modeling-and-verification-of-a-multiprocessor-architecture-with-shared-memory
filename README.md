@@ -5,7 +5,7 @@
 #### Bus
 ![](images/BUS.jpg)
 #### Arbitre
-![](images/Modelisation.jpg)
+![](images/arbitre_1proc.jpg)
 #### Mémoire
 ![](images/Modelisation.jpg)
 #### Cache L1 

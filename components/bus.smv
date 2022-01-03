@@ -1,7 +1,8 @@
 --b_in_L1_1, b_in_mem, valid, ack
-MODULE bus-device(ARB_GNT)
+MODULE bus-device(AD,DT, CTRL, VALID, ACK,ARB_GNT, b_in_L1_1, b_in_mem)
 VAR
     state: { MEM, CACHE};
+    b_out: array 0..4 of boolean;
 
 ASSIGN
     init(state) := MEM;
@@ -12,15 +13,43 @@ ASSIGN
             state = CACHE : MEM;
         esac;
 
+    b_out[AD]:=
+        case
+           ARB_GNT =0: b_in_mem[AD];
+           ARB_GNT =1: b_in_L1_1[AD];
+        esac;
 
+    b_out[DT]:=
+        case
+           ARB_GNT =0: b_in_mem[DT];
+           ARB_GNT =1: b_in_L1_1[DT];
+        esac;
 
+    b_out[CTRL]:=
+        case
+           ARB_GNT =0: b_in_mem[CTRL];
+           ARB_GNT =1: b_in_L1_1[CTRL];
+        esac;
+    b_out[ACK]:=
+        case
+           ARB_GNT =0: b_in_mem[ACK];
+           ARB_GNT =1: b_in_L1_1[ACK];
+        esac;
 
 MODULE main
 VAR 
 -- dans un premier temps,
 --  on considère que l'on est dans un système monoprocesseur
     ARB_GNT : {0,1};
-    bus: bus-device(ARB_GNT);
+    b_in_L1_1: array 0..4 of boolean;
+    b_in_mem: array 0..4 of boolean;
+    bus: bus-device(AD,DT, CTRL, VALID, ACK, ARB_GNT, b_in_L1_1, b_in_mem);
+DEFINE
+    AD:=0;
+    DT:=1;
+    CTRL:=2;
+    VALID :=  3;
+    ACK:=4;
 ASSIGN
     ARB_GNT := {0,1};
 
@@ -42,7 +71,7 @@ SPEC
     AG !( ARB_GNT= 0 & ARB_GNT=1)
 
 -- Accéssibilité
-SPEC
-    AG ( EG bus.state=MEM)
-SPEC
-    AG ( EG bus.state=CACHE)
+--SPEC
+--    AG ( EG bus.state=MEM)
+--SPEC
+--    AG ( EG bus.state=CACHE)
