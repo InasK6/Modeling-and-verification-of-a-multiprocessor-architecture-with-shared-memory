@@ -1,7 +1,93 @@
+-- Cache just transmitting ( no memorization)
+-- req corresponds to the request assigned from the processor to the cache
+MODULE cache-device(AD, DT, CTRL, VALID, req, ARB_GNT, b_out)
+VAR
+    state: { idle, request, waiting, response};
+    L1_req: boolean;
+    ID: {1};
+    b_in_L1_1: array 0..4 of boolean;
+
+ASSIGN  
+    init(state):= idle;
+    next( state):=
+        case    
+            state=idle & !req[VALID]: idle;
+            state= idle & req[VALID]: request;
+            state=request & !(ARB_GNT=ID): request;
+            state= request & (ARB_GNT=ID): waiting;
+            state=waiting & !(ARB_GNT=ID) | !b_out[VALID]: waiting;
+            state=waiting & (ARB_GNT=ID) & b_out[VALID]: response;
+            state=response : idle;
+
+
+        esac;
+    
+    L1_req:=
+        case
+            state=request | state= waiting: TRUE;
+            state=response | state=idle : FALSE;
+            --TRUE: FALSE;
+        esac;
+
 MODULE main
 VAR 
-    -- REQ[0] is the memory adress AD
-    -- REQ[] 
-    REQ : array 0..2 of boolean 
+    -- REQ[0] is the memory address AD 
+    --\in {0,1} with memory having 2 cachable adresses
 
-MODULE cache-device
+    -- REQ[1] is the value DT \in {0,1} to be stored at AD 
+    
+    -- REQ[2] specifies the type of request 
+    -- 0 for READ and 1 for WRITE
+
+    -- REQ[3] \in {0, 1} = 1 when a request is set 
+
+    REQ : array 0..3 of boolean ;
+    b_out: array 0..4 of boolean;
+    arb_gnt: {0, 1};
+    cache: cache-device(AD, DT, CTRL, VALID, REQ,arb_gnt, b_out);
+
+    state: { idle, request, waiting, response};
+
+DEFINE
+    AD:=0;
+    DT:=1;
+    CTRL:=2;
+    VALID:=3;
+    ACK := 4;
+
+ASSIGN
+    -- REQ from processor
+    REQ[ AD] := { FALSE, TRUE};
+    REQ[ DT] := { FALSE, TRUE};
+    REQ[ CTRL] := { FALSE, TRUE};
+    REQ[ VALID] := { FALSE, TRUE};
+    -- b_out from bus
+    b_out[AD]:= { FALSE, TRUE};
+    b_out[DT]:= { FALSE, TRUE};
+    b_out[CTRL]:= { FALSE, TRUE};
+
+    init(b_out[VALID]):=FALSE;
+
+    next(b_out[VALID]):= 
+        case 
+            FALSE: TRUE;
+            TRUE: FALSE;
+        esac;
+    b_out[ACK]:= { FALSE, TRUE};
+    -- arb_gnt signal from Arbitre
+    arb_gnt:={0, 1};
+
+
+SPEC 
+    AG ( cache.ID=1)
+--SPEC
+   -- si une requête est posé par un cache, alors il aura forcément une réponse
+ --  AG ( cache.L1_req-> AF cache.state=response)    
+SPEC
+    -- impossible d'avoir le signal L1_req levé et le cache à l'état idle
+    AG !( cache.L1_req & cache.state=idle )
+SPEC
+    -- quand une requête a reçu sa réponse, elle positionne le signal à 0
+    -- à condition que l
+    -- arb_gnt=0 correspond à attribution du bus à la mémoire
+    AG ( arb_gnt=0 & b_out[VALID] & cache.L1_req -> AF !cache.L1_req)

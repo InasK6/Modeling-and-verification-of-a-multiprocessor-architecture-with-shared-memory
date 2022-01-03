@@ -36,3 +36,13 @@ SPEC
 -- Après l'obtention du bus par une requête, la mémoire prend la main
 SPEC
     AG (bus.state=CACHE -> AX(bus.state=MEM))
+
+-- Le bus n'est pas attribué à deux composants au même temps
+SPEC 
+    AG !( ARB_GNT= 0 & ARB_GNT=1)
+
+-- Accéssibilité
+SPEC
+    AG ( EG bus.state=MEM)
+SPEC
+    AG ( EG bus.state=CACHE)

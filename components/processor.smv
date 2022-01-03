@@ -1,4 +1,4 @@
-MODULE processor-device(req, resp)
+MODULE processor-device(AD, DT, CTRL, VALID,req, resp)
 -- req is provided by the program
 -- resp is provided by the cache 
 VAR
@@ -11,8 +11,9 @@ ASSIGN
             state=NO_IO & ! req[VALID]: NO_IO;
             state=NO_IO & req[VALID] : WR_RD;
             -- pas de nouvelle requête avant le traîtement de l'ancienne
-            state= WR_RD & !resp[VALID]: WAITING; --mise de VALID à 0
+            state= WR_RD : WAITING; --mise de VALID à 0
             state=WAITING & resp[VALID]: NO_IO;
+            state=WAITING & !resp[VALID]: WAITING;
 
         esac;
     
@@ -22,7 +23,7 @@ ASSIGN
     req_cache[VALID]:=
         case
             state=WAITING: FALSE;
-            state=WR_WR: TRUE;
+            state=WR_RD: TRUE;
             state=NO_IO: FALSE;
         esac;
 
@@ -33,8 +34,8 @@ VAR
     -- encounters a read or write instruction
     req:  array 0..3 of boolean;
     -- activated when the cache has an answer for the processor
-    resp: boolean;
-    processor: processor-device(req, resp);
+    resp: array 0..3 of boolean;
+    processor: processor-device(AD, DT, CTRL, VALID, req, resp);
 
 DEFINE
     AD:=0;
@@ -48,9 +49,13 @@ ASSIGN
     req[DT] := { FALSE, TRUE};
     req[CTRL] := { FALSE, TRUE};
 
-    resp:=
+    resp[VALID]:=
         case
             -- if there is a request 
-            req: { FALSE, TRUE};
-            !req: FALSE;
+            req[VALID]: { FALSE, TRUE};
+            !req[VALID]: FALSE;
         esac;
+    
+    resp[AD]:= { FALSE, TRUE};
+    resp[DT] := { FALSE, TRUE};
+    resp[CTRL] := { FALSE, TRUE};
