@@ -383,7 +383,7 @@ SPEC -- false
     AG ( req[VALID] & req[CTRL] -> AF (memory.cases[tmp]= req[DT]))
 -- Une requête de lecture fini par être repercutée de la mémoire vers le processeur
 SPEC -- false
-    AG ( req[VALID] & !req[CTRL] -> AF (processor.register=memory.cases[tmp]))
+   AG ( req[VALID] & !req[CTRL] -> AF (processor.register=memory.cases[tmp]))
  -- Je reprends les propriétés qui étaient false dans les tests des composants indépendemment et je les teste avec la configuration monoprocesseur
 ---------------------------------------------------- CACHE -------------------------------------------------------------------
 SPEC --FALSE
@@ -397,13 +397,19 @@ SPEC -- false
 SPEC --false
 -- Vivacité
 -- si la mémoire est à l'état read-wait alors il aura un résultat à un moment donné
-    AG (memory.state= read_wait -> AF memory.state=read_ready)
+   AG (memory.state= read_wait -> AF memory.state=read_ready)
 -- de même pour write-wait
 SPEC --false
     AG (memory.state= write_wait  -> AF memory.state=write_ready)
 ---------------------------------------------------- ARBITRE -------------------------------------------------------------------
 SPEC --false
-    AG ( cache.L1_req -> AF arbitre.arb_gnt=1)
+   AG ( cache.L1_req -> AF arbitre.arb_gnt=1)
 
 -- Equité 
 -- Quelque chose se produira infiniement souvent
+SPEC --true
+-- le cache accède au bus infiniment souvent
+    AG (AF (arbitre.arb_gnt=0))
+SPEC -- false
+-- la mémoire accède au bus infiniement souvent
+    AG ( AF (arbitre.arb_gnt=1))
