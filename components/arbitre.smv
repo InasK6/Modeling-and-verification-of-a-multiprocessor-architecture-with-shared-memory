@@ -45,13 +45,19 @@ ASSIGN
 -- Vivacité
 -- Quelque chose de bon finira par arriver
 -- Si la requête L1_req est positionné, elle finira par avoir l'arbitre
-SPEC
+SPEC --false
     AG ( L1_req -> AF arbitre.arb_gnt=1)
 
 -- Sureté
 -- Quelque chose de mauvais n'arrivera jamais
 -- On ne peut pas avoir l'arbitre attribué à deux composants au même temps
-SPEC
+SPEC -- true
     AG !( arbitre.arb_gnt=1 & arbitre.arb_gnt=0)
 -- Equité 
 -- Quelque chose se produira infiniement souvent
+SPEC --true
+    -- il y a une exécution tel que le bus est attribué à la mémoire infirniment souvent 
+    EG EF(arbitre.arb_gnt =0)
+-- de même pour le cache 
+SPEC --true
+    EG EF(arbitre.arb_gnt =1)

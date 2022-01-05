@@ -1,22 +1,36 @@
 -- Cache just transmitting ( no memorization)
 -- req corresponds to the request assigned from the processor to the cache
-MODULE cache-device(AD, DT, CTRL, VALID, req, ARB_GNT, b_out)
+MODULE cache-device(AD, DT, CTRL, VALID, ACK, req, ARB_GNT, b_out)
 VAR
     state: { idle, request, waiting, response};
     L1_req: boolean;
     ID: {1};
     b_in_L1_1: array 0..4 of boolean;
+    resp: array 0..3 of boolean;
 
 ASSIGN  
     init(state):= idle;
+    init(b_in_L1_1[AD]) := FALSE;
+    init(b_in_L1_1[DT]):= FALSE;
+    init(b_in_L1_1[CTRL]):= FALSE;
+    init(b_in_L1_1[VALID]) :=FALSE;
+    b_in_L1_1[ACK]:= FALSE; -- only positionned by memory
+
+    init(resp[DT]):= req[DT];
+    init(resp[VALID]):= FALSE; 
+    -- no new request is done by processor before getting a response for the previous request
+    -- So the AD et CRTL values should remain the same 
+    resp[AD]:= req[AD];
+    resp[CTRL] :=req[CTRL];    
+    
     next( state):=
         case    
             state=idle & !req[VALID]: idle;
-            state= idle & req[VALID]: request;
+            state= idle & req[VALID]: request; -- reading value from req 
             state=request & !(ARB_GNT=ID): request;
             state= request & (ARB_GNT=ID): waiting;
             state=waiting & !(ARB_GNT=ID) | !b_out[VALID]: waiting;
-            state=waiting & (ARB_GNT=ID) & b_out[VALID]: response;
+            state=waiting & (ARB_GNT=ID) & b_out[VALID]: response; -- writing response in resp
             state=response : idle;
 
 
@@ -28,7 +42,45 @@ ASSIGN
             state=response | state=idle : FALSE;
             --TRUE: FALSE;
         esac;
+    
+    next(b_in_L1_1[AD]):=
+        case
+            state= idle & req[VALID]: req[AD] ;-- positionning value on req
+            TRUE: b_in_L1_1[AD];
 
+        esac;
+    next(b_in_L1_1[DT]):=
+        case
+            state= idle & req[VALID]: req[DT] ;-- positionning value on req
+            TRUE: b_in_L1_1[DT];
+
+        esac;
+    next(b_in_L1_1[CTRL]):=
+        case
+            state= idle & req[VALID]: req[CTRL] ;-- positionning value on req
+            TRUE: b_in_L1_1[CTRL];
+
+        esac;
+    next(b_in_L1_1[VALID]):=
+        case
+            state= request: req[VALID] ;-- positionning value on req
+            TRUE: b_in_L1_1[VALID];
+
+        esac;
+    
+    -- positioning response to the processor
+    next(resp[DT]):=
+        case
+            state=waiting & (ARB_GNT=ID) & b_out[VALID]: b_out[DT];
+            TRUE: resp[DT];
+        esac;
+    next(resp[VALID]):=
+        case
+            state=waiting & (ARB_GNT=ID) & b_out[VALID]: TRUE;
+            TRUE: FALSE;
+        esac;
+
+    
 MODULE main
 VAR 
     -- REQ[0] is the memory address AD 
@@ -44,7 +96,7 @@ VAR
     REQ : array 0..3 of boolean ;
     b_out: array 0..4 of boolean;
     arb_gnt: {0, 1};
-    cache: cache-device(AD, DT, CTRL, VALID, REQ,arb_gnt, b_out);
+    cache: cache-device(AD, DT, CTRL, VALID, ACK, REQ,arb_gnt, b_out);
 
     state: { idle, request, waiting, response};
 
@@ -55,6 +107,7 @@ DEFINE
     VALID:=3;
     ACK := 4;
 
+    MEM:=0;
 ASSIGN
     -- REQ from processor
     REQ[ AD] := { FALSE, TRUE};
@@ -78,15 +131,19 @@ ASSIGN
     arb_gnt:={0, 1};
 
 
-SPEC 
-    AG ( cache.ID=1)
---SPEC
+SPEC -- TRUE
+    AG ( cache.ID=1)  
+-- Vivacité
+-- Quelque chose de bon finira par arriver
+SPEC --FALSE
    -- si une requête est posé par un cache, alors il aura forcément une réponse
- --  AG ( cache.L1_req-> AF cache.state=response)    
-SPEC
+  AG ( cache.L1_req -> AF (cache.state=response))    
+-- Sureté
+-- Quelque chose de mauvais n'arrivera jamais
+SPEC -- TRUE
     -- impossible d'avoir le signal L1_req levé et le cache à l'état idle
     AG !( cache.L1_req & cache.state=idle )
-SPEC
+SPEC --TRUE
     -- quand une requête a reçu sa réponse, elle positionne le signal à 0
     -- à condition que l
     -- arb_gnt=0 correspond à attribution du bus à la mémoire

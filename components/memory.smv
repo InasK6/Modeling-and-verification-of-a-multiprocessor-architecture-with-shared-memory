@@ -136,4 +136,11 @@ ASSIGN
     b_out[VALID]:={FALSE, TRUE};
     b_out[ACK]:=FALSE; --only memory can place it to true
 
-    --spec
+
+SPEC --false
+-- Vivacité
+-- si la mémoire est à l'état read-wait alors il aura un résultat à un moment donné
+    AG (memory.state= read_wait -> AF memory.state=read_ready)
+-- de même pour write-wait
+SPEC --false
+    AG (memory.state= write_wait  -> AF memory.state=write_ready)

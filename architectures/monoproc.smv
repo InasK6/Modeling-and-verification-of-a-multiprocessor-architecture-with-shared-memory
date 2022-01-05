@@ -1,11 +1,409 @@
+MODULE cache-device(AD, DT, CTRL, VALID, ACK, req, ARB_GNT, b_out)
+VAR
+    state: { idle, request, waiting, response};
+    L1_req: boolean;
+    ID: {1};
+    b_in_L1_1: array 0..4 of boolean;
+    resp: array 0..3 of boolean;
+
+ASSIGN  
+    init(state):= idle;
+    init(b_in_L1_1[AD]) := FALSE;
+    init(b_in_L1_1[DT]):= FALSE;
+    init(b_in_L1_1[CTRL]):= FALSE;
+    init(b_in_L1_1[VALID]) :=FALSE;
+    b_in_L1_1[ACK]:= FALSE; -- only positionned by memory
+
+    init(resp[DT]):= req[DT];
+    init(resp[VALID]):= FALSE; 
+    -- no new request is done by processor before getting a response for the previous request
+    -- So the AD et CRTL values should remain the same 
+    resp[AD]:= req[AD];
+    resp[CTRL] :=req[CTRL];    
+    
+    next( state):=
+        case    
+            state=idle & !req[VALID]: idle;
+            state= idle & req[VALID]: request; -- reading value from req 
+            state=request & !(ARB_GNT=ID): request;
+            state= request & (ARB_GNT=ID): waiting;
+            state=waiting & !(ARB_GNT=ID) | !b_out[VALID]: waiting;
+            state=waiting & (ARB_GNT=ID) & b_out[VALID]: response; -- writing response in resp
+            state=response : idle;
+
+
+        esac;
+    
+    L1_req:=
+        case
+            state=request | state= waiting: TRUE;
+            state=response | state=idle : FALSE;
+            --TRUE: FALSE;
+        esac;
+    
+    next(b_in_L1_1[AD]):=
+        case
+            state= idle & req[VALID]: req[AD] ;-- positionning value on req
+            TRUE: b_in_L1_1[AD];
+
+        esac;
+    next(b_in_L1_1[DT]):=
+        case
+            state= idle & req[VALID]: req[DT] ;-- positionning value on req
+            TRUE: b_in_L1_1[DT];
+
+        esac;
+    next(b_in_L1_1[CTRL]):=
+        case
+            state= idle & req[VALID]: req[CTRL] ;-- positionning value on req
+            TRUE: b_in_L1_1[CTRL];
+
+        esac;
+    next(b_in_L1_1[VALID]):=
+        case
+            state= request: req[VALID] ;-- positionning value on req
+            TRUE: b_in_L1_1[VALID];
+
+        esac;
+    
+    -- positioning response to the processor
+    next(resp[DT]):=
+        case
+            state=waiting & (ARB_GNT=ID) & b_out[VALID]: b_out[DT];
+            TRUE: resp[DT];
+        esac;
+    next(resp[VALID]):=
+        case
+            state=waiting & (ARB_GNT=ID) & b_out[VALID]: TRUE;
+            TRUE: FALSE;
+        esac;
+
+MODULE bus-device(AD,DT, CTRL, VALID, ACK,ARB_GNT, b_in_L1_1, b_in_mem)
+VAR
+    state: { MEM, CACHE};
+    b_out: array 0..4 of boolean;
+
+ASSIGN
+    init(state) := MEM;
+    next(state) := 
+        case
+            state = MEM & ARB_GNT =0 : MEM;
+            state = MEM & ARB_GNT=1 : CACHE;
+            state = CACHE : MEM;
+        esac;
+
+    b_out[AD]:=
+        case
+           ARB_GNT =0: b_in_mem[AD];
+           ARB_GNT =1: b_in_L1_1[AD];
+        esac;
+
+    b_out[DT]:=
+        case
+           ARB_GNT =0: b_in_mem[DT];
+           ARB_GNT =1: b_in_L1_1[DT];
+        esac;
+
+    b_out[CTRL]:=
+        case
+           ARB_GNT =0: b_in_mem[CTRL];
+           ARB_GNT =1: b_in_L1_1[CTRL];
+        esac;
+    b_out[ACK]:=
+        case
+           ARB_GNT =0: b_in_mem[ACK];
+           ARB_GNT =1: b_in_L1_1[ACK];
+        esac;
+
+MODULE processor-device(AD, DT, CTRL, VALID,req, resp)
+-- req is provided by the program
+-- resp is provided by the cache 
+VAR
+    state: { NO_IO, WR_RD, WAITING};
+    req_cache: array 0..3 of boolean;
+    -- added to store the value after a read
+    register: boolean;
+ASSIGN
+    init(state):= NO_IO;
+    next(state):=
+        case
+            state=NO_IO & ! req[VALID]: NO_IO;
+            state=NO_IO & req[VALID] : WR_RD;
+            -- pas de nouvelle requête avant le traîtement de l'ancienne
+            state= WR_RD : WAITING; --mise de VALID à 0
+            state=WAITING & resp[VALID]: NO_IO;
+            state=WAITING & !resp[VALID]: WAITING;
+
+        esac;
+    
+    req_cache[AD]:= req[AD];
+    req_cache[DT]:= req[DT];
+    req_cache[CTRL]:=req[CTRL];
+    req_cache[VALID]:=
+        case
+            state=WAITING: FALSE;
+            state=WR_RD: TRUE;
+            state=NO_IO: FALSE;
+        esac;
+    register:=
+        case
+            -- lecture
+            !req[CTRL] & resp[VALID]: resp[DT];
+            TRUE: FALSE;
+        esac;
+
+MODULE memory-device(AD, DT, CTRL, VALID, ACK,b_out)
+VAR
+    state: { idle, read_wait, write_wait, read_ready, write_ready };
+    ready: boolean;
+    b_in_mem: array 0..4 of boolean;
+    cases: array 0..1 of boolean;
+
+DEFINE 
+    REQUEST :=(state= read_wait |state= write_wait);
+    ENDED := ( state = read_ready | state = write_ready);
+ASSIGN
+    init(state) := idle;
+    init(ready) := FALSE;
+
+    -- hypothèse: cases mémoires initialement contiennent 0
+    init(cases[0]) := FALSE;
+    init(cases[1]) := FALSE;
+
+    -- valeurs initiales de b_in_mem non significatives
+    init(b_in_mem[0]) := FALSE;
+    init(b_in_mem[1]) :=FALSE;
+    init(b_in_mem[2]) :=FALSE;
+    init(b_in_mem[3]) :=FALSE;
+    init( b_in_mem[4]) :=FALSE;
+ 
+    
+    next(ready) :=
+        case 
+            -- both scenarios are possible 
+            --( either the memory has finish processing the querie or not)
+            REQUEST & ready=FALSE: {TRUE, FALSE}; 
+            -- answer to query completed
+            ready=TRUE : FALSE;
+            -- otherwise ready keeps the same value
+            ready=FALSE : FALSE;
+        esac;
+
+    next(state) :=
+        case 
+        -- pas de requête
+            state=idle & b_out[3] = FALSE : idle;
+        -- arrivée d'une requête
+            state= idle & b_out[2]=FALSE: read_wait;-- modification of b_in_mem
+            state=idle & b_out[2]=TRUE : write_wait;-- modification of cases  
+        -- attente qu'elle soit traîtée par la mémoire 
+            REQUEST & !ready: state;
+            state=read_wait & ready : read_ready;
+            state= write_wait & ready: write_ready;
+            ENDED : idle; --mise de Valid à 1
+            
+
+        esac;
+
+    -- Memory locations
+    next(cases[0]):=
+        case
+            -- écriture à l'adresse 0
+            state=idle & b_out[VALID] & !b_out[AD] : b_out[1];
+            -- écriture à l'adresse 1
+            -- lecture ou tout autre cas => garde la même valeur
+            TRUE: cases[0];
+        esac;
+    next(cases[1]):=
+        case
+            -- écriture à l'adresse 1
+            state=idle & b_out[VALID] & b_out[AD] : b_out[1];
+            -- dans tout autre situation, on garde les mêmes valeurs
+            TRUE: cases[1];
+        esac;
+
+    -- b_in_mem
+    next(b_in_mem[AD]):=
+        case
+            b_out[VALID]: b_out[AD];
+            TRUE: b_in_mem[AD];
+        esac;
+    
+    next(b_in_mem[DT]):=
+        case
+            -- écriture 
+            b_out[VALID] & b_out[CTRL] : b_out[DT]; -- ACK nécessaire
+            -- lecture à l'adresse 0
+            b_out[VALID] & !b_out[CTRL] & !b_out[AD]: cases[0];
+            --lecture à l'adresse 1
+            b_out[VALID] & !b_out[CTRL] & b_out[AD]: cases[1];
+            TRUE: b_in_mem[DT];
+
+        esac;
+    
+    -- la mémoire ne modifie pas cette valeur
+    next(b_in_mem[CTRL]):= 
+        case
+            b_out[VALID] : b_out[CTRL];
+            TRUE: b_in_mem[CTRL];
+        esac;
+
+    next(b_in_mem[VALID]):=
+        case
+            ENDED: TRUE;
+            state=idle: FALSE;
+            TRUE: b_in_mem[VALID];
+        esac;
+    
+    next(b_in_mem[ACK]):=
+        case
+            -- écriture
+            b_out[VALID] & b_out[CTRL]: TRUE;
+            state=idle: FALSE;
+            TRUE: b_in_mem[ACK];
+
+        esac;
+
+
+MODULE arbitre-device(VALID,L1_req,b_out )
+VAR
+    arb_gnt: {0,1};
+DEFINE
+    mem := 0;
+    L :=1;
+ASSIGN
+    init(arb_gnt):=mem;
+    next(arb_gnt):=
+        case
+            arb_gnt=mem & (!L1_req | !b_out[VALID] ) : mem;
+            arb_gnt=mem & (L1_req & b_out[VALID]) : L;
+            arb_gnt=L : mem;
+            
+        esac;
+
+
 MODULE main
+VAR
+        -- intern variable activated when an executing program
+    -- encounters a read or write instruction
+    req:  array 0..3 of boolean;
+    -- activated when the cache has an answer for the processor
+    processor: processor-device(AD, DT, CTRL, VALID,req, cache.resp);
+    cache: cache-device(AD, DT, CTRL, VALID, ACK, req, arbitre.arb_gnt, bus.b_out);
+    bus: bus-device(AD,DT, CTRL, VALID, ACK,arbitre.arb_gnt, cache.b_in_L1_1, memory.b_in_mem);
+    memory: memory-device(AD, DT, CTRL, VALID, ACK,bus.b_out);
+    arbitre: arbitre-device(VALID,cache.L1_req,bus.b_out );
+    -- variable utile pour le test d'une spécification
+    tmp: {0,1};
 
-MODULE cache-device
+   
+DEFINE
+    AD:=0;
+    DT:=1;
+    CTRL:=2;
+    VALID:=3;
+    ACK:=4;
 
-MODULE bus-device
+   -- MEM:= 0;
+   -- CACHE :=1;
+ASSIGN
+    req[VALID] := { FALSE, TRUE};
+    req[AD]:= { FALSE, TRUE};
+    req[DT] := { FALSE, TRUE};
+    req[CTRL] := { FALSE, TRUE};
+    tmp:=
+        case 
+            req[AD]:1;
+            !req[AD]:0;
+        esac;
 
-MODULE processor
+    
+-- Accessibilité
+-- S'assurer que tous les états dans tous les automates sont atteints
+----------------------------------------------------- CACHE -------------------------------------------------------------------
+SPEC -- true
+    AG ( EF cache.state= idle) 
+SPEC -- true
+    AG ( EF cache.state= request)
+SPEC -- true  
+    AG ( EF cache.state= waiting)
+SPEC -- true
+    AG (EF cache.state = response)
+-----------------------------------------------------  BUS  -------------------------------------------------------------------
+SPEC -- true
+    AG ( EF bus.state=MEM)
+SPEC --true
+    AG ( EF bus.state=CACHE)
+--------------------------------------------------  PROCESSOR -----------------------------------------------------------------
+SPEC -- true
+    AG ( EF processor.state= NO_IO)
+SPEC -- true
+    AG (EF processor.state = WR_RD)
+SPEC -- true
+    AG (EF processor.state = WAITING)
+----------------------------------------------------- MEMORY ------------------------------------------------------------------
+SPEC -- true
+    AG ( EF memory.state = idle )
+SPEC -- true
+    AG ( EF memory.state = read_wait)
+SPEC -- true
+    AG ( EF memory.state = read_ready)
+SPEC --true
+    AG ( EF memory.state = write_wait)
+SPEC -- true
+    AG ( EF memory.state = write_ready)
+---------------------------------------------------- ARBITRE -------------------------------------------------------------------
+SPEC -- true
+    AG ( EF arbitre.arb_gnt=0)
+SPEC -- true
+    AG ( EF arbitre.arb_gnt=1)
 
-MODULE memory
 
-MODULE arbitre
+
+-- Sureté et Vivacité
+-- Quelque chose de mauvais n'arrivera jamais
+-- Quelque chose de bon finira par arriver
+-- tester que si le processeur positionne une requête, elle est transmise au bus dans b_out
+SPEC --false
+    AG (req[VALID] -> cache.b_in_L1_1[VALID]) -- requête passée du processeur vers le cache
+SPEC  -- False  
+    AG ( req[VALID] -> AF (arbitre.arb_gnt=cache.ID & bus.b_out[VALID])) -- requête passée du processeur vers bus avec AF
+
+-- une requête du processeur reçoit une réponse à sa requête
+-- Je ne comprends pas d'ou vient l'erreur
+ -- Error: Unexpected LTL operator on this Specification   
+--SPEC
+--    G ( REQ[VALID] -> F (arb_gnt=cache.ID & X(a=MEM U (ARB_GNT=MEM & b_out[VALID]) ))) 
+
+-- Toute requête finit par recevoir une réponse
+SPEC -- false
+    AG ( req[VALID]-> AF cache.resp[VALID])
+-- Une requête d'écriture d'un processeur fini par être repercutée sur la mémoire
+SPEC -- false
+    AG ( req[VALID] & req[CTRL] -> AF (memory.cases[tmp]= req[DT]))
+-- Une requête de lecture fini par être repercutée de la mémoire vers le processeur
+SPEC -- false
+    AG ( req[VALID] & !req[CTRL] -> AF (processor.register=memory.cases[tmp]))
+ -- Je reprends les propriétés qui étaient false dans les tests des composants indépendemment et je les teste avec la configuration monoprocesseur
+---------------------------------------------------- CACHE -------------------------------------------------------------------
+SPEC --FALSE
+   -- si une requête est posé par un cache, alors il aura forcément une réponse
+  AG ( cache.L1_req -> AF (cache.state=response)) 
+-----------------------------------------------------  BUS  -------------------------------------------------------------------
+--------------------------------------------------  PROCESSOR -----------------------------------------------------------------
+SPEC -- false
+    AG( processor.state=WR_RD -> AF processor.state=NO_IO)
+----------------------------------------------------- MEMORY ------------------------------------------------------------------
+SPEC --false
+-- Vivacité
+-- si la mémoire est à l'état read-wait alors il aura un résultat à un moment donné
+    AG (memory.state= read_wait -> AF memory.state=read_ready)
+-- de même pour write-wait
+SPEC --false
+    AG (memory.state= write_wait  -> AF memory.state=write_ready)
+---------------------------------------------------- ARBITRE -------------------------------------------------------------------
+SPEC --false
+    AG ( cache.L1_req -> AF arbitre.arb_gnt=1)
+
+-- Equité 
+-- Quelque chose se produira infiniement souvent

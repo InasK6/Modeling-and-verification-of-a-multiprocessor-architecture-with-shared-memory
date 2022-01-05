@@ -55,23 +55,18 @@ ASSIGN
 
 -- Spécifications à vérifier pour le bus
 -- quand il n'y a pas de requête posée, il est toujours attribué à la mémoire
-SPEC 
+SPEC  -- true
     AG ((ARB_GNT =0) -> AX(bus.state=MEM)) 
 
 -- s'il y a une requête, le cache fini par obtenir le bus
-SPEC
+SPEC -- true
     AG (ARB_GNT=1 & ! (bus.state=CACHE) -> AX(bus.state)=CACHE)
 
 -- Après l'obtention du bus par une requête, la mémoire prend la main
-SPEC
+SPEC -- true
     AG (bus.state=CACHE -> AX(bus.state=MEM))
 
 -- Le bus n'est pas attribué à deux composants au même temps
-SPEC 
+SPEC -- true
     AG !( ARB_GNT= 0 & ARB_GNT=1)
 
--- Accéssibilité
---SPEC
---    AG ( EG bus.state=MEM)
---SPEC
---    AG ( EG bus.state=CACHE)

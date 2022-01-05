@@ -59,3 +59,7 @@ ASSIGN
     resp[AD]:= { FALSE, TRUE};
     resp[DT] := { FALSE, TRUE};
     resp[CTRL] := { FALSE, TRUE};
+
+-- Vivacité: le processeur finit par avoir une réponse
+SPEC -- false
+    AG( processor.state=WR_RD -> AF processor.state=NO_IO)
